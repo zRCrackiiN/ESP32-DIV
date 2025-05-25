@@ -17,7 +17,6 @@ extern TFT_eSPI tft;
 void updateStatusBar();
 float readBatteryVoltage();
 float readInternalTemperature();
-bool isSDCardAvailable();
 void drawStatusBar(float batteryVoltage, bool forceUpdate = false);
 
 void initDisplay();

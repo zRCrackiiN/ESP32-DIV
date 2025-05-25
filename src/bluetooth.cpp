@@ -2860,3 +2860,270 @@ void blesnifferLoop() {
   sniffer.loop();
   } 
 }
+
+namespace BleWardriver {
+  #define SD_CS_PIN      5
+  #define WARDRIVE_DIR   "/ble_wardrive"
+  #define WARDRIVE_LOG   "/ble_wardrive/log.txt"
+
+  static std::vector<String> saveResults;       // <-- never cleared until save
+  static bool scanning = false;
+  static unsigned long lastScan = 0;
+  static BLEScan* pBLEScan = nullptr;
+
+  void wardriverSetup() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE);
+    tft.setCursor(10,  60);
+    tft.print("Up   : Start");
+    tft.setCursor(10,  80);
+    tft.print("Down : Stop");
+    drawStatusBar(readBatteryVoltage(), false);
+
+    // init BLE scanner once
+    BLEDevice::init("");
+    pBLEScan = BLEDevice::getScan();
+    pBLEScan->setActiveScan(true);
+    pBLEScan->setInterval(100);
+    pBLEScan->setWindow(99);
+
+    saveResults.clear();
+  }
+
+  void wardriverLoop() {
+    // A = UP starts, B = DOWN stops
+    if (!scanning && pcf.digitalRead(BTN_UP) == LOW) {
+      scanning = true;
+      lastScan  = 0;
+      delay(200);
+    }
+    if (scanning && pcf.digitalRead(BTN_DOWN) == LOW) {
+      // stop
+      scanning = false;
+      delay(200);
+
+      // draw save prompt
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextFont(2);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_WHITE);
+
+      if (SD.begin(SD_CS_PIN)) {
+        if (!SD.exists(WARDRIVE_DIR)) SD.mkdir(WARDRIVE_DIR);
+        tft.setCursor(10, 60);
+        tft.println("Save results to SD?");
+        tft.setCursor(10, 90);
+        tft.println("UP = Yes   DOWN = No");
+        // wait for explicit UP or DOWN
+        while (true) {
+          if (pcf.digitalRead(BTN_UP) == LOW) {
+            File f = SD.open(WARDRIVE_LOG, FILE_APPEND);
+            if (f) {
+              for (auto &L : saveResults) f.println(L);
+              f.close();
+            }
+            break;
+          }
+          if (pcf.digitalRead(BTN_DOWN) == LOW) {
+            break;
+          }
+          delay(50);
+        }
+      } else {
+        tft.setCursor(10,60); tft.println("No SD card!");
+        tft.setCursor(10,90); tft.println("Press any button");
+        while (pcf.digitalRead(BTN_UP)!=LOW && pcf.digitalRead(BTN_DOWN)!=LOW) delay(50);
+        delay(200);
+      }
+
+      // go back to menu
+      wardriverSetup();
+      return;
+    }
+
+    // periodic scan
+    if (scanning && millis() - lastScan >= SCAN_INTERVAL) {
+      lastScan = millis();
+
+      // do a 5s BLE scan
+      BLEScanResults results = pBLEScan->start(5, false);
+      tft.fillScreen(TFT_BLACK);
+
+      // header
+      tft.setTextFont(2);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_RED);
+      tft.setCursor(10, 22);
+      tft.print("BLE Wardriving...");
+      tft.setTextColor(TFT_WHITE);
+
+      // build a temporary display buffer
+      std::vector<String> displayResults;
+      int count = results.getCount();
+      for (int i = 0; i < count && i < 10; i++) {
+        int y = 40 + i * 20;
+        BLEAdvertisedDevice dev = results.getDevice(i);
+        String name = dev.getName().length() ? dev.getName().c_str()
+                                             : dev.getAddress().toString().c_str();
+        int rssi = dev.getRSSI();
+        String line = name + " (" + String(rssi) + " dBm)";
+        displayResults.push_back(line);
+        saveResults.push_back(line);      // <-- accumulate every result
+      }
+
+      // show just this batch
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_WHITE);
+      for (size_t i = 0; i < displayResults.size(); i++) {
+        tft.setCursor(10, 40 + i * 20);
+        tft.println(displayResults[i]);
+      }
+
+      // footer
+      tft.setTextColor(TFT_YELLOW);
+      tft.setCursor(10, 280);
+      tft.println("Hold DOWN to stop");
+
+      drawStatusBar(readBatteryVoltage(), true);
+
+      // clear old scan results in BLE library
+      pBLEScan->clearResults();
+    }
+
+    delay(100);
+  }
+}
+
+namespace FlipperDetector {
+  #define DETECTOR_DIR   "/flipper"
+  #define DETECTOR_LOG   "/flipper/detector_log.txt"
+  static std::vector<String> lastResults;
+
+  static bool scanning = false;
+  static unsigned long lastScan = 0;
+
+  BLEScan* pBLEScan = nullptr;
+
+  const String FLIPPER_MAC_PREFIX_1 = "80:e1:26";
+  const String FLIPPER_MAC_PREFIX_2 = "80:e1:27";
+
+  void detectorSetup() {
+    // show menu
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE);
+    tft.setCursor(10,  60);
+    tft.print("Up   : Start");
+    tft.setCursor(10,  80);
+    tft.print("Down : Stop");
+    drawStatusBar(readBatteryVoltage(), false);
+
+    // init BLE scanner
+    BLEDevice::init("");
+    pBLEScan = BLEDevice::getScan();
+    pBLEScan->setActiveScan(true);
+    pBLEScan->setInterval(100);
+    pBLEScan->setWindow(99);
+  }
+
+  void detectorLoop() {
+    // A = UP starts
+    if (!scanning && pcf.digitalRead(BTN_UP) == LOW) {
+      scanning = true;
+      lastScan = 0;
+    }
+    // B = DOWN stops
+    if (scanning && pcf.digitalRead(BTN_DOWN) == LOW) {
+      scanning = false;
+      // wait for release so we don't immediately trigger the save prompt
+      while(pcf.digitalRead(BTN_UP)==LOW || pcf.digitalRead(BTN_DOWN)==LOW) {
+        delay(50);
+      }
+
+      // clear & prompt save
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextFont(2);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_WHITE);
+
+      if (SD.begin(SD_CS_PIN)) {
+        if (!SD.exists(DETECTOR_DIR)) SD.mkdir(DETECTOR_DIR);
+        tft.setCursor(10, 60);
+        tft.println("Save results to SD?");
+        tft.setCursor(10, 90);
+        tft.println("UP = Yes   RIGHT = No");
+        // wait for choice
+        while (true) {
+          if (pcf.digitalRead(BTN_UP) == LOW) {
+            File f = SD.open(DETECTOR_LOG, FILE_APPEND);
+            if (f) {
+              for (auto &L : lastResults) f.println(L);
+              f.close();
+            }
+            break;
+          }
+          if (pcf.digitalRead(BTN_RIGHT) == LOW) {
+            break;
+          }
+          delay(50);
+        }
+      } else {
+        tft.setCursor(10, 60);
+        tft.println("No SD card!");
+        tft.setCursor(10, 90);
+        tft.println("Press any button");
+        while (pcf.digitalRead(BTN_UP)!=LOW && pcf.digitalRead(BTN_DOWN)!=LOW) {
+          delay(50);
+        }
+        delay(200);
+      }
+
+      // back to menu
+      detectorSetup();
+      return;
+    }
+
+    // every SCAN_INTERVAL while scanning
+    if (scanning && millis() - lastScan >= SCAN_INTERVAL) {
+      lastScan = millis();
+      // perform a 5s BLE scan
+      BLEScanResults results = pBLEScan->start(5, false);
+
+      // display only this scan’s flipper matches
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextFont(2);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_RED);
+      tft.setCursor(10, 22);
+      tft.print("Detecting Flippers...");
+      tft.setTextColor(TFT_WHITE);
+      tft.setTextSize(1);
+
+      // show up to 10 matches
+      int row = 0;
+      for (int i = 0; i < results.getCount() && row < 10; ++i) {
+        auto dev = results.getDevice(i);
+        String mac = dev.getAddress().toString().c_str();
+        if (mac.startsWith(FLIPPER_MAC_PREFIX_1) || mac.startsWith(FLIPPER_MAC_PREFIX_2)) {
+          int rssi = dev.getRSSI();
+          String line = mac + " RSSI:" + String(rssi);
+          tft.setCursor(10, 40 + row*20);
+          tft.println(line);
+          lastResults.push_back(line);
+          row++;
+        }
+      }
+
+      // footer
+      tft.setTextColor(TFT_YELLOW);
+      tft.setCursor(10, 280);
+      tft.println("Press DOWN to stop");
+      drawStatusBar(readBatteryVoltage(), true);
+    }
+
+    delay(100);
+  }
+}

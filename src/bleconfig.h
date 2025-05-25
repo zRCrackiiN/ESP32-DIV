@@ -69,4 +69,13 @@ namespace BleSniffer {
   void blesnifferSetup();
 }
 
+namespace BleWardriver {
+  void wardriverLoop();
+  void wardriverSetup();
+}
+
+namespace FlipperDetector {
+  void detectorSetup();
+  void detectorLoop();
+}
 #endif // CONFIG_H

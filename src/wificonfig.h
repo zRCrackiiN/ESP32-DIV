@@ -38,6 +38,7 @@ extern PCF8574 pcf;
 #include <SD.h>
 #include <Update.h>
 #include <ESPmDNS.h>
+#include <vector>
 using namespace std;
 
 
@@ -77,5 +78,8 @@ namespace FirmwareUpdate {
   void updateLoop();
 }
 
-
-#endif // WIFICONFIG_H
+namespace WifiWardriver {
+  void wardriverSetup();
+  void wardriverLoop();
+}
+  #endif // WIFICONFIG_H

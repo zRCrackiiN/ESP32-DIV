@@ -1,6 +1,8 @@
 #ifndef SHARED_H
 #define SHARED_H
 
+#pragma once
+extern bool sdAvailable;
 
 const uint16_t ORANGE = 0xfbe4;
 const uint16_t GRAY = 0x8410;

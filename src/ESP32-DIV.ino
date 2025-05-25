@@ -2,7 +2,6 @@
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <PCF8574.h>
-
 #include "Touchscreen.h"
 #include "wificonfig.h"
 #include "bleconfig.h"
@@ -10,6 +9,11 @@
 #include "utils.h"
 #include "shared.h"
 #include "icon.h"
+
+
+bool sdAvailable = false;
+
+#define SD_CS_PIN 5
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -49,7 +53,7 @@ int current_menu_index = 0;
 bool is_main_menu = false;
 
 
-const int NUM_SUBMENU_ITEMS = 7; 
+const int NUM_SUBMENU_ITEMS = 8; 
 const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "Packet Monitor",
     "Beacon Spammer",
@@ -57,16 +61,19 @@ const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "Deauth Detector",
     "WiFi Scanner",
     "Captive Portal",
+    "WiFi Wardriver",
     "Back to Main Menu"}; 
 
 
-const int bluetooth_NUM_SUBMENU_ITEMS = 6; 
+const int bluetooth_NUM_SUBMENU_ITEMS = 8; 
 const char *bluetooth_submenu_items[bluetooth_NUM_SUBMENU_ITEMS] = {
     "BLE Jammer",
     "BLE Spoofer",
     "Sour Apple",
     "Sniffer",
     "BLE Scanner",
+    "BLE Wardriver",
+    "Flipper Detector",
     "Back to Main Menu"};
 
 
@@ -120,6 +127,7 @@ const unsigned char *wifi_submenu_icons[NUM_SUBMENU_ITEMS] = {
     bitmap_icon_eye2,         // Deauth Detector
     bitmap_icon_jammer,       // WiFi Scanner
     bitmap_icon_bash,         // Captive Portal
+    bitmap_icon_scanner,      // WiFi Wardriver
     bitmap_icon_go_back       
 };
 
@@ -129,6 +137,8 @@ const unsigned char *bluetooth_submenu_icons[bluetooth_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_apple,       // Sour Apple
     bitmap_icon_analyzer,    // Analyzer
     bitmap_icon_graph,       // BLE Scanner
+    bitmap_icon_scanner,     // BLE Wardriver
+    bitmap_icon_analyzer,    // Flipper Detector
     bitmap_icon_go_back      
 };
 
@@ -414,15 +424,6 @@ void handleWiFiSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 6) { 
-            in_sub_menu = false;
-            feature_active = false;
-            feature_exit_requested = false; 
-            displayMenu();  
-            handleButtons(); 
-            is_main_menu = false;           
-        }
-
         if (current_submenu_index == 0) {
             current_submenu_index = 0;
             in_sub_menu = true;
@@ -627,7 +628,44 @@ void handleWiFiSubmenuButtons() {
                 delay(200);
             }
         }
-    }
+
+        // new WiFi Wardriver
+        if (current_submenu_index == 6) {
+             in_sub_menu = true;
+             feature_active = true;
+             feature_exit_requested = false; 
+            WifiWardriver::wardriverSetup();
+            while (current_submenu_index == 6 && !feature_exit_requested) {
+                WifiWardriver::wardriverLoop();
+                if (isButtonPressed(BTN_SELECT)) {
+                    feature_exit_requested = false;
+                    in_sub_menu = false;
+                    feature_active = false;
+                    displaySubmenu();
+                    delay(200);
+                    while (isButtonPressed(BTN_SELECT)) {}
+                    break;
+                }
+            }
+            if (feature_exit_requested) {
+                in_sub_menu = false;
+                feature_active = false;
+                feature_exit_requested = false;
+                displaySubmenu();
+                delay(200);
+            }
+        }
+    
+       
+        }
+        else if (current_submenu_index == 7) { 
+            in_sub_menu = false;
+            feature_active = false;
+            feature_exit_requested = false; 
+            displayMenu();  
+            handleButtons(); 
+            is_main_menu = false;           
+        }
 
     if (ts.touched() && !feature_active) {
         TS_Point p = ts.getPoint();
@@ -652,7 +690,7 @@ void handleWiFiSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 6) {
+                if (current_submenu_index == 7) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false; 
@@ -851,7 +889,40 @@ void handleWiFiSubmenuButtons() {
                         displaySubmenu(); 
                         delay(200);
                     }
+                } else if (current_submenu_index == 6) {
+                    current_submenu_index = 6;
+                    in_sub_menu = true;
+                    feature_active = true;
+                    feature_exit_requested = false; 
+                    WifiWardriver::wardriverSetup();   
+                    while (current_submenu_index == 6 && !feature_exit_requested) {  
+                        current_submenu_index = 6;
+                        in_sub_menu = true;
+                        WifiWardriver::wardriverLoop();      
+                        if (isButtonPressed(BTN_SELECT)) {
+                            in_sub_menu = true;
+                            is_main_menu = false; 
+                            submenu_initialized = false;
+                            feature_active = false;
+                            feature_exit_requested = false; 
+                            displaySubmenu(); 
+                            delay(200);            
+                            while (isButtonPressed(BTN_SELECT)) {
+                            }           
+                            break;  
+                        }
+                    }
+                    if (feature_exit_requested) {
+                        in_sub_menu = true;
+                        is_main_menu = false; 
+                        submenu_initialized = false;
+                        feature_active = false;
+                        feature_exit_requested = false; 
+                        displaySubmenu(); 
+                        delay(200);
+                    }
                 }
+
                 break;
             }
         }
@@ -884,14 +955,6 @@ void handleBluetoothSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 5) { 
-            in_sub_menu = false;
-            feature_active = false;
-            feature_exit_requested = false;
-            displayMenu();  
-            handleButtons(); 
-            is_main_menu = false;           
-        }
 
         if (current_submenu_index == 0) {
             current_submenu_index = 0;
@@ -1061,6 +1124,71 @@ void handleBluetoothSubmenuButtons() {
                 displaySubmenu(); 
                 delay(200);
             }
+        }
+
+
+        // new BLE Wardriver
+        if (current_submenu_index == 5) {
+             in_sub_menu = true;
+             feature_active = true;
+             feature_exit_requested = false; 
+            // <<< nothing here before!
+            BleWardriver::wardriverSetup();
+            while (current_submenu_index == 5 && !feature_exit_requested) {
+                BleWardriver::wardriverLoop();
+                if (isButtonPressed(BTN_SELECT)) {
+                    feature_exit_requested = false;
+                    in_sub_menu = false;
+                    feature_active = false;
+                    displaySubmenu();
+                    delay(200);
+                    while (isButtonPressed(BTN_SELECT)) {}
+                    break;
+                }
+            }
+            if (feature_exit_requested) {
+                in_sub_menu = false;
+                feature_active = false;
+                feature_exit_requested = false;
+                displaySubmenu();
+                delay(200);
+            }
+        }
+                // new BLE Wardriver
+            if (current_submenu_index == 6) {
+                 in_sub_menu = true;
+                 feature_active = true;
+                 feature_exit_requested = false; 
+                // <<< nothing here before!
+            FlipperDetector::detectorSetup();
+            while (current_submenu_index == 6 && !feature_exit_requested) {
+                FlipperDetector::detectorLoop();
+                if (isButtonPressed(BTN_SELECT)) {
+                    feature_exit_requested = false;
+                    in_sub_menu = false;
+                    feature_active = false;
+                    displaySubmenu();
+                    delay(200);
+                    while (isButtonPressed(BTN_SELECT)) {}
+                    break;
+                }
+            }
+            if (feature_exit_requested) {
+                in_sub_menu = false;
+                feature_active = false;
+                feature_exit_requested = false;
+                displaySubmenu();
+                delay(200);
+            }
+        }
+
+        if (current_submenu_index == 7) { 
+            in_sub_menu = false;
+            feature_active = false;
+            feature_exit_requested = false;
+            displayMenu();  
+            handleButtons(); 
+            is_main_menu = false;           
         }
     }
 
@@ -2423,7 +2551,7 @@ void handleButtons() {
 
 void setup() {
   Serial.begin(115200);
-  
+
   tft.init();
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
@@ -2436,6 +2564,22 @@ void setup() {
 
   displayLogo(TFT_WHITE, 2000);
   
+  // explicitly initialize VSPI pins, then mount SD:
+  SPI.begin(18, 19, 23, 5);
+  SPI.setDataMode(SPI_MODE0);
+  sdAvailable = SD.begin(SD_CS_PIN);
+
+  if (!sdAvailable) {
+    Serial.println(" SD Init failed!");
+    // Print card type for more clues
+    Serial.print("cardType(): "); 
+    Serial.println(SD.cardType());
+  } else {
+    Serial.println(" SD initialized OK");
+    Serial.print("blockSize(): ");
+    Serial.println(SD.cardSize() / 1024, DEC);
+  }
+
   //pinMode(36, INPUT);
   //pinMode(BACKLIGHT_PIN, OUTPUT);
   //digitalWrite(BACKLIGHT_PIN, HIGH);

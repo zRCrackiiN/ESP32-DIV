@@ -140,7 +140,6 @@ uint8_t temprature_sens_read();
 unsigned long lastStatusBarUpdate = 0;
 const int STATUS_BAR_UPDATE_INTERVAL = 1000; 
 float lastBatteryVoltage = 0.0;
-bool sdAvailable = false;
 
 float readBatteryVoltage() {
   uint8_t temprature_sens_read();
@@ -162,11 +161,6 @@ float readInternalTemperature() {
   return temperature;
 }
 
-// Check if SD card is available
-bool isSDCardAvailable() {
-  return SD.begin();
-}
-
 void drawStatusBar(float batteryVoltage, bool forceUpdate) {
   static int lastBatteryPercentage = -1;
   static int lastWiFiStrength = -1;
@@ -179,8 +173,8 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
   wifiStrength = constrain(wifiStrength, 0, 100);
 
   float internalTemp = readInternalTemperature();
-  bool sdAvailable = false;
-  //bool sdAvailable = isSDCardAvailable();
+  
+
 
   if (batteryPercentage != lastBatteryPercentage || wifiStrength != lastWiFiStrength || forceUpdate) {
     int barHeight = 20;  // Status bar height

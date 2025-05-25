@@ -4317,3 +4317,136 @@ void updateLoop() {
     }
   }   
 }
+
+namespace WifiWardriver {
+  #define WARDRIVE_DIR   "/wardrive"
+  #define WARDRIVE_LOG   "/wardrive/wifi_wardrive_log.txt"
+  static std::vector<String>lastResults;
+
+  // 1) state for your periodic scan
+  static const unsigned long SCAN_INTERVAL = 10000; // every 10s
+  static bool scanning = false;
+  static unsigned long lastScan = 0;
+
+
+void wardriverSetup() {
+    // Clear & show our “menu”
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE);
+
+    tft.setCursor(10,  60);
+    tft.print("Up   : Start");
+    tft.setCursor(10,  80);
+    tft.print("Down : Stop");
+
+    drawStatusBar(readBatteryVoltage(), false);
+    WiFi.mode(WIFI_MODE_STA);
+    WiFi.disconnect();
+  }
+
+
+void wardriverLoop() {
+  // A = UP starts, B = DOWN stops
+  if (!scanning &&  pcf.digitalRead(BTN_UP)   == LOW) {
+    scanning = true;
+    lastScan  = 0;
+  }
+  if (     scanning &&  pcf.digitalRead(BTN_DOWN) == LOW) {
+    // stop
+    scanning = false;
+
+    // clear to black and set up font
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE);
+
+    if (SD.begin(SD_CS_PIN)) {
+      // make sure folder exists
+      if (!SD.exists(WARDRIVE_DIR)) SD.mkdir(WARDRIVE_DIR);
+
+      // prompt save
+      tft.setCursor(10, 60);
+      tft.println("Save results to SD?");
+      tft.setCursor(10, 90);
+      tft.println("UP = Yes   DOWN = No");
+
+      // wait for choice
+      while (true) {
+        if (pcf.digitalRead(BTN_UP)   == LOW) {
+          File f = SD.open(WARDRIVE_LOG, FILE_APPEND);
+          if (f) {
+            for (auto &L : lastResults) f.println(L);
+            f.close();
+          }
+          break;
+        }
+        if (pcf.digitalRead(BTN_DOWN) == LOW) {
+          break;
+        }
+        delay(50);
+      }
+    } else {
+      // no SD card
+      tft.setCursor(10, 60);
+      tft.println("No SD card!");
+      tft.setCursor(10, 90);
+      tft.println("Press any button to continue");
+      // wait for any button
+      while (pcf.digitalRead(BTN_UP)!=LOW && pcf.digitalRead(BTN_DOWN)!=LOW) {
+        delay(50);
+      }
+      delay(200);
+    }
+
+    // back to your normal submenu screen
+    wardriverSetup();
+    return;
+  }
+
+  // if scanning, every SCAN_INTERVAL
+  if (scanning && millis() - lastScan >= SCAN_INTERVAL) {
+    lastScan = millis();
+
+    int n = WiFi.scanNetworks(false, true);
+    tft.fillScreen(TFT_BLACK);
+
+
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+      // header when active
+        tft.setTextColor(TFT_RED);
+        tft.setCursor(10, 22);
+        tft.print("Wardriving Active...");
+        tft.setTextColor(TFT_PURPLE);
+        tft.setTextSize(1);
+
+        lastResults.clear();
+
+        // Display up to 15 networks
+    for (int i = 0; i < n && i < 10; i++) {
+      int y = 40 + i * 20;
+      String ssid = WiFi.SSID(i);
+      int rssi  = WiFi.RSSI(i);
+      int ch    = WiFi.channel(i);
+      String sec = WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "OPEN" : "WPA";
+      String line = ssid + " (" + String(rssi) + "dBm) CH:" + String(ch) + " " + sec;
+      tft.setCursor(10, y);
+      tft.println(line);
+      lastResults.push_back(line);
+    }
+
+    // bottom prompt
+    tft.setTextColor(TFT_YELLOW);
+    tft.setCursor(10,  280);
+    tft.println("Press DOWN to stop");
+
+    drawStatusBar(readBatteryVoltage(), true);
+  }
+
+    // simple debounce/delay
+    delay(100);
+}
+}
