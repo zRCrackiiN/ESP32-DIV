@@ -2,7 +2,9 @@
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
+#include "GPSInterface.h"
 
+extern GPSInterface gpsIf;
 
 /*
  * 
@@ -200,6 +202,8 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     tft.setTextSize(1);
     tft.print(String(batteryPercentage) + "%");
 
+
+
     // **Draw Wi-Fi Signal Bars (Neon Green)**
     int wifiX = 180;
     int wifiY = y + 11;
@@ -229,6 +233,20 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
       tft.drawBitmap(220, y - 3, bitmap_icon_nullsdcard, 16, 16, TFT_RED);
     }
 
+    // — GPS indicator —
+    const char* gpsLabel = "GPS";
+    uint8_t  ts        = 1;
+    uint8_t  charW     = 6 * ts;
+    uint8_t  labelW    = strlen(gpsLabel) * charW;
+    uint8_t  spacing   = 4;
+    int xGps = wifiX - spacing - labelW;
+    int yGps = 4;
+    tft.setTextFont(1);
+    tft.setTextSize(ts);
+    tft.setTextColor(gpsIf.hasFix() ? TFT_GREEN : TFT_RED, DARK_GRAY);
+    tft.setCursor(xGps, yGps);
+    tft.print(gpsLabel);
+    
     // **Bottom Line for Aesthetic (Neon Green)**
     //tft.drawLine(0, barHeight - 1, tft.width(), barHeight - 1, ORANGE);  
 

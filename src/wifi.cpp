@@ -2,6 +2,33 @@
 #include "shared.h"
 #include "icon.h"
 #include "Touchscreen.h"
+#include "GPSInterface.h"
+
+extern GPSInterface gpsIf;
+
+#define WARDRIVE_DIR   "/wardrive"
+#define WARDRIVE_LOG   "/wardrive/wifi_wardrive_log.txt"
+
+static String makeWardriveFilename() {
+  auto &P = const_cast<TinyGPSPlus&>( gpsIf.parser() );
+  char buf[64];
+
+  if (P.date.isValid() && P.time.isValid()) {
+    snprintf(buf, sizeof(buf),
+      WARDRIVE_DIR "/wardrive_%04u%02u%02u_%02u%02u%02u.txt",
+      P.date.year(), P.date.month(), P.date.day(),
+      P.time.hour(), P.time.minute(), P.time.second()
+    );
+  } else {
+    // fallback to millis() if no valid time
+    snprintf(buf, sizeof(buf),
+      WARDRIVE_DIR "/wardrive_%lu.txt",
+      millis() / 1000
+    );
+  }
+
+  return String(buf);
+}
 
 /*
    PacketMonitor
@@ -4319,8 +4346,6 @@ void updateLoop() {
 }
 
 namespace WifiWardriver {
-  #define WARDRIVE_DIR   "/wardrive"
-  #define WARDRIVE_LOG   "/wardrive/wifi_wardrive_log.txt"
   static std::vector<String>lastResults;
 
   // 1) state for your periodic scan
@@ -4371,19 +4396,31 @@ void wardriverLoop() {
       tft.setCursor(10, 60);
       tft.println("Save results to SD?");
       tft.setCursor(10, 90);
-      tft.println("UP = Yes   DOWN = No");
+      tft.println("UP = Yes   RIGHT = No");
 
       // wait for choice
       while (true) {
         if (pcf.digitalRead(BTN_UP)   == LOW) {
-          File f = SD.open(WARDRIVE_LOG, FILE_APPEND);
-          if (f) {
-            for (auto &L : lastResults) f.println(L);
+          String filename = makeWardriveFilename();
+          File f = SD.open(filename.c_str(), FILE_WRITE);
+          if (!f) {
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_RED);
+            tft.drawCentreString("SD write error!", 120, 140, 2);
+          } else {
+            for (auto &line : lastResults) {
+              f.println(line);
+            }
             f.close();
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_GREEN);
+            tft.drawCentreString("Saved to:", 120, 120, 2);
+            tft.drawCentreString(filename, 120, 140, 1);
           }
+          delay(1500);
           break;
         }
-        if (pcf.digitalRead(BTN_DOWN) == LOW) {
+        if (pcf.digitalRead(BTN_RIGHT) == LOW) {
           break;
         }
         delay(50);
@@ -4406,47 +4443,86 @@ void wardriverLoop() {
     return;
   }
 
-  // if scanning, every SCAN_INTERVAL
-  if (scanning && millis() - lastScan >= SCAN_INTERVAL) {
-    lastScan = millis();
 
-    int n = WiFi.scanNetworks(false, true);
-    tft.fillScreen(TFT_BLACK);
+//WDRV SCANNER
+if (scanning && millis() - lastScan >= SCAN_INTERVAL) {
+  lastScan = millis();
 
+  int n = WiFi.scanNetworks(false, true);
+  tft.fillScreen(TFT_BLACK);
 
-        tft.setTextFont(2);
-        tft.setTextSize(1);
-      // header when active
-        tft.setTextColor(TFT_RED);
-        tft.setCursor(10, 22);
-        tft.print("Wardriving Active...");
-        tft.setTextColor(TFT_PURPLE);
-        tft.setTextSize(1);
+  // header when active
+  tft.setTextFont(2);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_RED);
+  tft.setCursor(10, 22);
+  tft.print("Wardriving Active...");
+  tft.setTextFont(1);
+  tft.setTextColor(TFT_GREEN);
 
-        lastResults.clear();
+  lastResults.clear();
 
-        // Display up to 15 networks
-    for (int i = 0; i < n && i < 10; i++) {
-      int y = 40 + i * 20;
-      String ssid = WiFi.SSID(i);
-      int rssi  = WiFi.RSSI(i);
-      int ch    = WiFi.channel(i);
-      String sec = WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "OPEN" : "WPA";
-      String line = ssid + " (" + String(rssi) + "dBm) CH:" + String(ch) + " " + sec;
-      tft.setCursor(10, y);
-      tft.println(line);
-      lastResults.push_back(line);
+  for (int i = 0; i < n && i < 10; i++) {
+    int y = 40 + i * 20;
+    String ssid = WiFi.SSID(i);
+    int rssi  = WiFi.RSSI(i);
+    int ch    = WiFi.channel(i);
+    String sec = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "OPEN" : "WPA";
+
+    // ——— build firstSeen from GPS ———
+    String firstSeen;
+    // get a non-const copy so we can call year()/month() etc.
+    TinyGPSDate  date = gpsIf.parser().date;
+    TinyGPSTime  time = gpsIf.parser().time;
+    if (date.isValid() && time.isValid()) {
+      char buf[32];
+      snprintf(buf, sizeof(buf),
+        "%04u-%02u-%02u %02u:%02u:%02u",
+        date.year(), date.month(), date.day(),
+        time.hour(), time.minute(), time.second()
+      );
+      firstSeen = String(buf);
+    } else {
+      firstSeen = "(no time)";
     }
 
-    // bottom prompt
-    tft.setTextColor(TFT_YELLOW);
-    tft.setCursor(10,  280);
-    tft.println("Press DOWN to stop");
+    // ——— build geo for on-screen display ———
+    bool haveFix = gpsIf.hasFix();
+    String geo = haveFix
+      ? "(GPS)"
+      : "(no GPS)";
 
-    drawStatusBar(readBatteryVoltage(), true);
+    // ——— log line for SD (full detail) ———
+    String logLine = WiFi.BSSIDstr(i)              // MAC
+                   + "," + ssid                    // SSID
+                   + ",[" + sec + "]"              // Auth
+                   + "," + firstSeen               // FirstSeen
+                   + "," + String(ch)              // Channel
+                   + "," + String(rssi)            // RSSI
+                   + "," + String(gpsIf.latitude(), 7)
+                   + "," + String(gpsIf.longitude(), 7)
+                   + "," + String(gpsIf.hdop(), 2)
+                   + ",WIFI";
+    lastResults.push_back(logLine);
+
+    // ——— show on screen (shorter, one line) ———
+    tft.setCursor(10, y);
+    tft.setTextSize(1);            // make text smaller
+    tft.setTextColor(TFT_WHITE);
+    tft.print(ssid);
+    tft.print(" ");
+    tft.print(rssi);
+    tft.print("dB ");
+    tft.print(geo);
   }
 
-    // simple debounce/delay
-    delay(100);
+  // bottom prompt + force status-bar redraw
+  tft.setTextColor(TFT_YELLOW);
+  tft.setCursor(10, 280);
+  tft.println("Press DOWN to stop");
+  drawStatusBar(readBatteryVoltage(), true);
+}
+
+delay(100);
 }
 }

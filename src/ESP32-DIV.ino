@@ -9,7 +9,28 @@
 #include "utils.h"
 #include "shared.h"
 #include "icon.h"
+#include <driver/uart.h>
+#include "GPSInterface.h"
 
+static constexpr uint32_t GPS_LOST_TIMEOUT = 5000; // milliseconds
+
+GPSInterface gps;
+GPSInterface gpsIf;
+volatile bool  gpsStateChanged = false;
+bool lastGpsFixState = false;
+
+// This runs on any change (gain _or_ loss) of fix
+void handleFixChange(bool newFix) {
+  gpsStateChanged = true;
+  if (newFix) {
+    Serial.println("GPS fix acquired");
+  } else {
+    Serial.println("GPS fix lost");
+  }
+}
+
+static const int GPS_RX_PIN = 39;
+static const int RX_BUF_SIZE = 2048;
 
 bool sdAvailable = false;
 
@@ -658,7 +679,7 @@ void handleWiFiSubmenuButtons() {
     
        
         }
-        else if (current_submenu_index == 7) { 
+        if (current_submenu_index == 7) { 
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false; 
@@ -2548,9 +2569,27 @@ void handleButtons() {
     }
 }
 
+void gpsTask(void*) {
+  for (;;) {
+    gpsIf.update();
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+}
 
 void setup() {
   Serial.begin(115200);
+  gpsIf.begin(115200);
+  gpsIf.onFixChange([](bool){ gpsStateChanged = true; });
+
+  xTaskCreatePinnedToCore(
+    gpsTask,       // function
+    "GPS task",    // name
+    2048,          // stack size
+    nullptr,       // parameters
+    1,             // priority
+    nullptr,       // handle
+    0              // core 0 or 1
+  );
 
   tft.init();
   tft.setRotation(0);
@@ -2558,7 +2597,7 @@ void setup() {
 
   setupTouchscreen();
 
-  loading(100, ORANGE, 0, 0, 2, true);
+  loading(100, RED, 0, 0, 2, true);
   
   tft.fillScreen(TFT_BLACK);
 
@@ -2604,6 +2643,19 @@ void setup() {
 }
 
 void loop() {
+  bool currFix = gpsIf.hasFix() && (gpsIf.fixAge() < GPS_LOST_TIMEOUT);
+  if (currFix != lastGpsFixState || gpsStateChanged) {
+    if (currFix)
+      Serial.println("GPS fix acquired");
+    else
+      Serial.println("GPS fix lost");
+
+    float batt = readBatteryVoltage();
+    drawStatusBar(batt, /*force=*/true);
+
+    lastGpsFixState = currFix;
+    gpsStateChanged = false;
+  }
   handleButtons();      
   //manageBacklight();     
   updateStatusBar(); 

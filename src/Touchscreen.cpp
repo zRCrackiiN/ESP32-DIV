@@ -1,6 +1,6 @@
 #include "Touchscreen.h"
 
-SPIClass touchscreenSPI = SPIClass(VSPI); 
+SPIClass touchscreenSPI = SPIClass(HSPI); 
 XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ); 
 bool feature_active = false; 
 
