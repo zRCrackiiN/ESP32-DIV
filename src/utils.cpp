@@ -354,16 +354,16 @@ void displayLogo(uint16_t color, int displayTime) {
   textX = screenWidth / 2.5;
   textY += 50;
   tft.setCursor(textX, textY);
-  tft.print("v1.1.0");
+  tft.print("v1.1.0-zR_CrackiiN Mod");
 
-  Serial.println("==================================");
-  Serial.println("ESP32-DIV                         ");
-  Serial.println("Developed by: CiferTech           ");
-  Serial.println("Version:      1.1.0               ");
-  Serial.println("Contact:      cifertech@gmail.com ");
-  Serial.println("GitHub:       github.com/cifertech");
-  Serial.println("Website:      CiferTech.net       ");
-  Serial.println("==================================");
+  Serial.println("===================================");
+  Serial.println("ESP32-DIV                          ");
+  Serial.println("Developed by: CiferTech            ");
+  Serial.println("Version:      1.1.0-zR_CrackiiN Mod");
+  Serial.println("Contact:      cifertech@gmail.com  ");
+  Serial.println("GitHub:       github.com/cifertech ");
+  Serial.println("Website:      CiferTech.net        ");
+  Serial.println("===================================");
 
   delay(displayTime);
 }

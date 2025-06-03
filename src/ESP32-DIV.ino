@@ -2383,7 +2383,7 @@ void handleAboutPage() {
   tft.setCursor(10, 90);
   tft.println(title);
   
-  int lineHeight = 30;
+  int lineHeight = 25;
   int text_x = 10;
   int text_y = 130;
   tft.setCursor(text_x, text_y);
@@ -2393,16 +2393,19 @@ void handleAboutPage() {
   tft.println("- Developed by: CiferTech");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Version: 1.1.0");
+  tft.println("- Built by zR_CrackiiN");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Contact: cifertech@gmail.com");
+  tft.println("- Version: 1.1.0-CrackiiN");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- GitHub: github.com/cifertech");
+  tft.println("- Discord: zr_crackiin");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Website: CiferTech.net");
+  tft.println("- GitHub: github.com/zRCrackiiN");
+  text_y += lineHeight;
+  tft.setCursor(text_x, text_y);
+  tft.println("- makerworld.com/en/@ZR_CrackiiN");
   text_y += lineHeight;
 
 
