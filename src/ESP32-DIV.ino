@@ -11,6 +11,7 @@
 #include "icon.h"
 #include <driver/uart.h>
 #include "GPSInterface.h"
+#include "NMEAMonitor.h"
 
 static constexpr uint32_t GPS_LOST_TIMEOUT = 5000; // milliseconds
 
@@ -116,10 +117,11 @@ const char *subghz_submenu_items[subghz_NUM_SUBMENU_ITEMS] = {
     "Back to Main Menu"};  
 
 
-const int tools_NUM_SUBMENU_ITEMS = 3; 
+const int tools_NUM_SUBMENU_ITEMS = 4; 
 const char *tools_submenu_items[tools_NUM_SUBMENU_ITEMS] = {
     "Serial Monitor",
     "Update Firmware",
+    "NMEA Monitor",
     "Back to Main Menu"};             
 
 
@@ -182,6 +184,7 @@ const unsigned char *subghz_submenu_icons[subghz_NUM_SUBMENU_ITEMS] = {
 const unsigned char *tools_submenu_icons[tools_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_bash,     // Serial Monitor 
     bitmap_icon_follow,   // Update Frimware
+    bitmap_icon_bash,
     bitmap_icon_go_back        
 };
 
@@ -1927,7 +1930,7 @@ void handleToolsSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 2) { 
+        if (current_submenu_index == 3) { 
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false; 
@@ -2002,7 +2005,35 @@ void handleToolsSubmenuButtons() {
                 displaySubmenu(); 
                 delay(200);
             }
-        }     
+        }
+          
+        if (current_submenu_index == 2) {     // NMEA Monitor
+            in_sub_menu = true;
+            feature_active = true;
+            feature_exit_requested = false;
+            NMEAMonitor::setup();
+            while (!feature_exit_requested) {
+                NMEAMonitor::loop();
+                if (isButtonPressed(BTN_SELECT)) {
+                feature_exit_requested = false;
+                in_sub_menu = false;
+                feature_active = false;
+                displaySubmenu();
+                delay(200);
+                while (isButtonPressed(BTN_SELECT)) {}
+                break;
+                }
+            }
+            if (feature_exit_requested) {
+                        in_sub_menu = true;
+                        is_main_menu = false; 
+                        submenu_initialized = false;
+                        feature_active = false;
+                        feature_exit_requested = false; 
+                        displaySubmenu(); 
+                        delay(200);
+                    }
+        }
     }
 
     if (ts.touched() && !feature_active) {
@@ -2028,7 +2059,7 @@ void handleToolsSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 2) {
+                if (current_submenu_index == 3) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false; 
@@ -2102,7 +2133,33 @@ void handleToolsSubmenuButtons() {
                         delay(200);
                     }
                 } 
-                break;
+                if (current_submenu_index == 2) {     // NMEA Monitor
+                    in_sub_menu = true;
+                    feature_active = true;
+                    feature_exit_requested = false;
+                    NMEAMonitor::setup();
+                    while (!feature_exit_requested) {
+                        NMEAMonitor::loop();
+                        if (isButtonPressed(BTN_SELECT)) {
+                        feature_exit_requested = false;
+                        in_sub_menu = false;
+                        feature_active = false;
+                        displaySubmenu();
+                        delay(200);
+                        while (isButtonPressed(BTN_SELECT)) {}
+                        break;
+                        }
+                    }
+                if (feature_exit_requested) {
+                        in_sub_menu = true;
+                        is_main_menu = false; 
+                        submenu_initialized = false;
+                        feature_active = false;
+                        feature_exit_requested = false; 
+                        displaySubmenu(); 
+                        delay(200);
+                    }
+                }
             }
         }
     }
@@ -2326,7 +2383,7 @@ void handleAboutPage() {
   tft.setCursor(10, 90);
   tft.println(title);
   
-  int lineHeight = 30;
+  int lineHeight = 25;
   int text_x = 10;
   int text_y = 130;
   tft.setCursor(text_x, text_y);
@@ -2336,16 +2393,19 @@ void handleAboutPage() {
   tft.println("- Developed by: CiferTech");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Version: 1.1.0");
+  tft.println("- Built by zR_CrackiiN");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Contact: cifertech@gmail.com");
+  tft.println("- Version: 1.1.0-CrackiiN");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- GitHub: github.com/cifertech");
+  tft.println("- Discord: zr_crackiin");
   text_y += lineHeight;
   tft.setCursor(text_x, text_y);
-  tft.println("- Website: CiferTech.net");
+  tft.println("- GitHub: github.com/zRCrackiiN");
+  text_y += lineHeight;
+  tft.setCursor(text_x, text_y);
+  tft.println("- makerworld.com/en/@ZR_CrackiiN");
   text_y += lineHeight;
 
 
